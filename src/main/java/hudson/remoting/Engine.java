@@ -111,9 +111,14 @@ public class Engine extends Thread {
     public static final String REMOTING_MINIMUM_VERSION_HEADER = "X-Remoting-Minimum-Version";
 
     /**
+     * The maximum number of Engine threads 
+     */
+    public static final int MAX_THREADS = Integer.getInteger(Engine.class.getName() + ".MAX_THREADS", 500);
+
+    /**
      * Thread pool that sets {@link #CURRENT}.
      */
-    private final ExecutorService executor = Executors.newCachedThreadPool(new ThreadFactory() {
+    private final ExecutorService executor = Executors.newFixedThreadPool(MAX_THREADS, new NamingThreadFactory(new ThreadFactory() {
         private final ThreadFactory defaultFactory = Executors.defaultThreadFactory();
         @Override
         public Thread newThread(@Nonnull final Runnable r) {
@@ -125,7 +130,7 @@ public class Engine extends Thread {
             thread.setUncaughtExceptionHandler((t, e) -> LOGGER.log(Level.SEVERE, e, () -> "Uncaught exception in thread " + t));
             return thread;
         }
-    });
+    }, Engine.class.getName()));
 
     /**
      * @deprecated

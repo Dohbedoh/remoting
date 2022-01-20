@@ -748,7 +748,7 @@ public class Launcher {
      * @since 2.24
      */
     public static void main(InputStream is, OutputStream os, Mode mode, boolean performPing, @CheckForNull JarCache cache) throws IOException, InterruptedException {
-        ExecutorService executor = Executors.newCachedThreadPool();
+        ExecutorService executor = Executors.newFixedThreadPool(MAX_THREADS, new NamingThreadFactory(Executors.defaultThreadFactory(), ChannelBuilder.class.getName()));
         ChannelBuilder cb = new ChannelBuilder("channel", executor)
                 .withMode(mode)
                 .withJarCacheOrDefault(cache);
@@ -837,6 +837,11 @@ public class Launcher {
      * Version number of Hudson this agent.jar is from.
      */
     public static final String VERSION = computeVersion();
+
+    /**
+     * The maximum number of ChannelBuilder threads
+     */
+    public static final int MAX_THREADS = Integer.getInteger(Launcher.class.getName() + ".MAX_THREADS", 500);
 
     private static final String JENKINS_VERSION_PROP_FILE = "hudson-version.properties";
     private static final String UNKNOWN_JENKINS_VERSION_STR = "?";
