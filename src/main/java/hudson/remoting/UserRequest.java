@@ -23,6 +23,7 @@
  */
 package hudson.remoting;
 
+import com.sun.management.HotSpotDiagnosticMXBean;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.remoting.ExportTable.ExportList;
 import hudson.remoting.RemoteClassLoader.IClassLoader;
@@ -31,13 +32,19 @@ import org.jenkinsci.remoting.util.AnonymousClassWarnings;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
+import javax.management.MBeanServer;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.NotSerializableException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -54,6 +61,9 @@ import java.util.logging.Logger;
 final class UserRequest<RSP,EXC extends Throwable> extends Request<UserRequest.ResponseToUserRequest<RSP,EXC>,EXC> {
 
     private static final Logger LOGGER = Logger.getLogger(UserRequest.class.getName());
+
+    public static final String OOM_THREADDUMP_PATH = System.getProperty(UserRequest.class.getName() + ".OOM_THREADDUMP_PATH","/home/jenkins/agent/td.txt");
+    public static final String OOM_HEAPDUMP_PATH = System.getProperty(UserRequest.class.getName() + ".OOM_THREADDUMP_PATH","/home/jenkins/agent/hd.hprof");
 
     private final byte[] request;
 
@@ -222,6 +232,41 @@ final class UserRequest<RSP,EXC extends Throwable> extends Request<UserRequest.R
             byte[] response = serialize(r,channel);
             return channel.remoteCapability.supportsProxyExceptionFallback() ? new NormalResponse<>(response) : new UserResponse<>(response,false);
         } catch (Throwable e) {
+            if(e instanceof OutOfMemoryError) {
+                // generate a heap dump
+                MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+                HotSpotDiagnosticMXBean mxBean = null;
+                try {
+                    mxBean = ManagementFactory.newPlatformMXBeanProxy(
+                        server, "com.sun.management:type=HotSpotDiagnostic", HotSpotDiagnosticMXBean.class);
+                    mxBean.dumpHeap(OOM_HEAPDUMP_PATH, false);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                // generate a thread dump
+                try (FileWriter fileWriter = new FileWriter(OOM_THREADDUMP_PATH); PrintWriter printWriter = new PrintWriter(fileWriter)) {
+                    final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+                    final ThreadInfo[] threadInfos = threadMXBean.dumpAllThreads(threadMXBean.isObjectMonitorUsageSupported(), threadMXBean.isSynchronizerUsageSupported());
+                    for (ThreadInfo threadInfo : threadInfos) {
+                        printWriter.print('"');
+                        printWriter.print(threadInfo.getThreadName());
+                        printWriter.println("\" ");
+                        final Thread.State state = threadInfo.getThreadState();
+                        printWriter.print("   java.lang.Thread.State: ");
+                        printWriter.print(state);
+                        final StackTraceElement[] stackTraceElements = threadInfo.getStackTrace();
+                        for (final StackTraceElement stackTraceElement : stackTraceElements) {
+                            printWriter.println();
+                            printWriter.print("        at ");
+                            printWriter.println(stackTraceElement);
+                        }
+                        printWriter.println();
+                    }
+                    printWriter.flush();
+                } catch (IOException ioException) {
+                    ioException.printStackTrace();
+                }
+            }
             // propagate this to the calling process
             try {
                 if (channel.remoteCapability.supportsProxyExceptionFallback()) {
