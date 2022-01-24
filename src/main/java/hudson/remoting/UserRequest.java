@@ -63,7 +63,7 @@ final class UserRequest<RSP,EXC extends Throwable> extends Request<UserRequest.R
     private static final Logger LOGGER = Logger.getLogger(UserRequest.class.getName());
 
     public static final String OOM_THREADDUMP_PATH = System.getProperty(UserRequest.class.getName() + ".OOM_THREADDUMP_PATH","/home/jenkins/agent/td.txt");
-    public static final String OOM_HEAPDUMP_PATH = System.getProperty(UserRequest.class.getName() + ".OOM_THREADDUMP_PATH","/home/jenkins/agent/hd.hprof");
+    public static final String OOM_HEAPDUMP_PATH = System.getProperty(UserRequest.class.getName() + ".OOM_HEAPDUMP_PATH","/home/jenkins/agent/hd.hprof");
 
     private final byte[] request;
 
